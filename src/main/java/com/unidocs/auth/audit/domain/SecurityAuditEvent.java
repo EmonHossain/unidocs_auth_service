@@ -1,0 +1,34 @@
+package com.unidocs.auth.audit.domain;
+
+import java.time.Instant;
+import java.util.Objects;
+import java.util.UUID;
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "security_audit_event")
+public class SecurityAuditEvent {
+    public enum Type { REGISTRATION_COMPLETED, ACCOUNT_LINKED, LOGIN_SUCCEEDED, LOGIN_FAILED, SESSION_REVOKED, REFRESH_REPLAY, REFRESH_FAILED, ALL_SESSIONS_REVOKED,
+        ACCOUNT_UNLOCKED, ACCOUNT_UNLOCK_FAILED, ACCOUNT_UNLINKED, PIN_CHANGED, PREFERENCE_CHANGED,
+        ORGANIZATION_CREATED, ORGANIZATION_MEMBERSHIP_ACTIVATED, ORGANIZATION_INVITATION_CREATED,
+        ORGANIZATION_INVITATION_SUPERSEDED, ORGANIZATION_INVITATION_FAILED, ORGANIZATION_ACCOUNT_PROVISIONED, GROUP_CREATED,
+        GROUP_MEMBER_ASSIGNED, GROUP_MEMBER_REVOKED, GROUP_JOIN_REQUESTED, GROUP_JOIN_APPROVED, GROUP_JOIN_REJECTED, GROUP_JOIN_CANCELLED, GROUP_RULE_CHANGED, GROUP_MEMBER_ADMIN_CHANGED, ACADEMIC_SEMESTER_CREATED,
+        COURSE_ENROLLMENT_REPLACED, GROUP_INVITATION_CREATED, GROUP_INVITATION_ACCEPTED, GROUP_INVITATION_REVOKED, EMPLOYEE_PROVISIONED, EMPLOYEE_ACTIVATED, EMPLOYEE_CREDENTIAL_RESET, STUDENT_ADMISSION_CREATED, STUDENT_ADMISSION_VERIFIED, STUDENT_ADMISSION_APPROVED, STUDENT_ADMISSION_REJECTED, INSTITUTE_CURATOR_CHANGED, INSTITUTE_DOMAIN_CHANGED, PASSWORD_RECOVERY_REQUESTED, PASSWORD_RESET_COMPLETED, EMPLOYEE_PASSWORD_RECOVERY_REQUESTED, EMPLOYEE_RECOVERY_PIN_ISSUED, EMPLOYEE_PASSWORD_RESET_COMPLETED }
+    @Id private UUID id;
+    private UUID userId;
+    private UUID accountId;
+    private UUID sessionId;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 64) private Type eventType;
+    @Column(nullable = false) private Instant occurredAt;
+
+    protected SecurityAuditEvent() { }
+
+    public SecurityAuditEvent(UUID id, UUID userId, UUID accountId, Type eventType, Instant now) {
+        this.id = Objects.requireNonNull(id);
+        this.userId = Objects.requireNonNull(userId);
+        this.accountId = Objects.requireNonNull(accountId);
+        this.eventType = Objects.requireNonNull(eventType);
+        this.occurredAt = Objects.requireNonNull(now);
+    }
+}
+
