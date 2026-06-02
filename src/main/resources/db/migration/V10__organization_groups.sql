@@ -1,0 +1,31 @@
+CREATE TABLE iam_group (
+    id BINARY(16) NOT NULL PRIMARY KEY,
+    organization_id BINARY(16) NOT NULL,
+    parent_group_id BINARY(16) NULL,
+    name VARCHAR(100) NOT NULL,
+    type VARCHAR(32) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    version BIGINT NOT NULL,
+    created_by_account_id BINARY(16) NOT NULL,
+    creation_request_id BINARY(16) NOT NULL,
+    creation_fingerprint CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
+    CONSTRAINT uq_group_organization_id UNIQUE (organization_id, id),
+    CONSTRAINT uq_group_creation UNIQUE (organization_id, created_by_account_id, creation_request_id),
+    CONSTRAINT fk_group_organization FOREIGN KEY (organization_id) REFERENCES organization(id),
+    CONSTRAINT fk_group_parent FOREIGN KEY (organization_id, parent_group_id) REFERENCES iam_group(organization_id, id),
+    CONSTRAINT chk_group_parent CHECK (parent_group_id IS NULL OR parent_group_id <> id),
+    CONSTRAINT chk_group_name CHECK (CHAR_LENGTH(TRIM(name)) BETWEEN 1 AND 100),
+    CONSTRAINT chk_group_type CHECK (type IN ('DEPARTMENT','COURSE','CLASS','TEAM','PROJECT','CUSTOM')),
+    CONSTRAINT chk_group_status CHECK (status IN ('ACTIVE','DISABLED')),
+    CONSTRAINT chk_group_version CHECK (version >= 1),
+    INDEX ix_group_listing (organization_id, status, id)
+);
+ALTER TABLE security_audit_event DROP CHECK chk_security_audit_type,
+    ADD CONSTRAINT chk_security_audit_type CHECK (event_type IN (
+        'REGISTRATION_COMPLETED', 'ACCOUNT_LINKED', 'LOGIN_SUCCEEDED', 'LOGIN_FAILED', 'SESSION_REVOKED', 'REFRESH_REPLAY',
+        'ACCOUNT_UNLOCKED', 'ACCOUNT_UNLOCK_FAILED', 'ACCOUNT_UNLINKED', 'PIN_CHANGED', 'PREFERENCE_CHANGED',
+        'ORGANIZATION_CREATED', 'ORGANIZATION_MEMBERSHIP_ACTIVATED', 'ORGANIZATION_INVITATION_CREATED',
+        'ORGANIZATION_INVITATION_SUPERSEDED', 'ORGANIZATION_INVITATION_FAILED', 'ORGANIZATION_ACCOUNT_PROVISIONED',
+        'GROUP_CREATED'));
