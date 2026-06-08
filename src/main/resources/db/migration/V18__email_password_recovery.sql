@@ -1,0 +1,20 @@
+CREATE TABLE email_password_recovery (
+    id BINARY(16) NOT NULL PRIMARY KEY,
+    account_id BINARY(16) NOT NULL,
+    identity_id BINARY(16) NOT NULL,
+    credential_version BIGINT NOT NULL,
+    destination VARCHAR(254) NOT NULL,
+    code_hash VARCHAR(60) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    created_at DATETIME(6) NOT NULL,
+    expires_at DATETIME(6) NOT NULL,
+    completed_at DATETIME(6) NULL,
+    CONSTRAINT fk_email_recovery_account FOREIGN KEY(account_id) REFERENCES user_account(id),
+    CONSTRAINT fk_email_recovery_identity FOREIGN KEY(identity_id) REFERENCES login_identity(id),
+    CONSTRAINT chk_email_recovery_status CHECK(status IN('PENDING','COMPLETED','SUPERSEDED','FAILED','EXPIRED')),
+    CONSTRAINT chk_email_recovery_attempts CHECK(attempts BETWEEN 0 AND 5),
+    CONSTRAINT chk_email_recovery_version CHECK(credential_version>=1),
+    INDEX ix_email_recovery_throttle(identity_id,created_at),
+    INDEX ix_email_recovery_account(account_id,status)
+);
