@@ -1,0 +1,113 @@
+// Organization content v3. Direct capability checks are bound to one
+// scope and authority UUID; separate relations prevent cross-authority joining.
+definition account {}
+
+definition operation {}
+
+definition scope_capability {
+    relation grantee: account
+    relation category_grantee: account
+    relation scoped_grantee: account
+    relation responsibility_grantee: account
+    relation parent: scope_capability
+
+    permission grant = grantee + parent->grant
+    permission category_grant = category_grantee + parent->category_grant
+    permission scoped_grant = scoped_grantee + parent->scoped_grant
+    // Assignment admission needs a complete responsibility at this scope, without ancestor/baseline mixing.
+    permission responsibility_grant = responsibility_grantee
+}
+
+definition scope_operation {
+    relation denied_account: account
+    relation parent: scope_operation
+
+    permission denied = denied_account + parent->denied
+}
+
+definition organization {
+    relation account_member: account
+    relation capability: scope_capability
+    relation category_capability: scope_capability
+    relation denied_operation: operation
+    relation operation_restriction: scope_operation
+
+    permission member = account_member
+    permission capability_grant = capability->grant
+    permission category_capability_grant = category_capability->grant
+    permission explicit_deny = denied_operation + operation_restriction->denied
+}
+
+definition department {
+    relation organization: organization
+    relation parent: department | team
+    relation account_member: account
+    relation capability: scope_capability
+    relation category_capability: scope_capability
+    relation denied_operation: operation
+    relation operation_restriction: scope_operation
+
+    permission member = account_member
+    permission capability_grant = capability->grant
+    permission category_capability_grant = category_capability->grant
+    permission explicit_deny = denied_operation + operation_restriction->denied + organization->explicit_deny + parent->explicit_deny
+}
+
+definition team {
+    relation organization: organization
+    relation parent: department | team
+    relation account_member: account
+    relation capability: scope_capability
+    relation category_capability: scope_capability
+    relation denied_operation: operation
+    relation operation_restriction: scope_operation
+
+    permission member = account_member
+    permission capability_grant = capability->grant
+    permission category_capability_grant = category_capability->grant
+    permission explicit_deny = denied_operation + operation_restriction->denied + organization->explicit_deny + parent->explicit_deny
+}
+
+// Resource permissions always intersect current organization membership. IAM's
+// operation/category witness and Document's privacy/lifecycle guards remain required.
+definition content_workspace {
+    relation organization: organization
+    relation live: organization
+    relation owner: account
+    relation viewer: account
+    relation editor: account
+    relation audience: organization | department | team
+
+    permission available = live->member & organization->member
+    permission view = (owner + viewer + editor + audience->member) & available
+    permission edit = (owner + editor + audience->member) & available
+}
+
+definition content_directory {
+    relation organization: organization
+    relation live: organization
+    relation parent: content_workspace | content_directory
+    relation owner: account
+    relation viewer: account
+    relation editor: account
+    relation audience: organization | department | team
+
+    // Exact invitations require live ancestors, without granting ancestor discovery.
+    permission available = live->member & organization->member & parent->available
+    permission view = (owner + viewer + editor + audience->member + parent->view) & available
+    permission edit = (owner + editor + audience->member + parent->edit) & available
+}
+
+definition content_file {
+    relation organization: organization
+    relation live: organization
+    relation parent: content_workspace | content_directory
+    relation owner: account
+    relation viewer: account
+    relation editor: account
+    relation audience: organization | department | team
+
+    permission available = live->member & organization->member & parent->available
+    permission view = (owner + viewer + editor + audience->member + parent->view) & available
+    permission edit = (owner + editor + parent->edit) & available
+}
