@@ -1,0 +1,69 @@
+// Phase-2 organization projection contract. IAM and Document remain authoritative and no
+// application request currently evaluates these permissions.
+// scope_capability object IDs encode the stable owning scope ID and authority
+// UUID so alternative authorities cannot be accidentally joined across layers.
+definition account {}
+
+definition operation {}
+
+definition scope_capability {
+    relation grantee: account
+    relation parent: scope_capability
+
+    permission grant = grantee + parent->grant
+}
+
+// Restrictions are operation-specific and account-specific; this typed scope
+// chain preserves those distinctions while inheriting denies to descendants.
+definition scope_operation {
+    relation denied_account: account
+    relation parent: scope_operation
+
+    permission denied = denied_account + parent->denied
+}
+
+definition organization {
+    relation account_member: account
+    relation capability: scope_capability
+    relation category_capability: scope_capability
+    relation denied_operation: operation
+    relation operation_restriction: scope_operation
+
+    permission member = account_member
+    permission capability_grant = capability->grant
+    permission category_capability_grant = category_capability->grant
+    permission explicit_deny = denied_operation + operation_restriction->denied
+}
+
+definition department {
+    relation organization: organization
+    relation parent: department | team
+    relation account_member: account
+    relation capability: scope_capability
+    relation category_capability: scope_capability
+    relation denied_operation: operation
+    relation operation_restriction: scope_operation
+
+    permission member = account_member
+    permission capability_grant = capability->grant
+    permission category_capability_grant = category_capability->grant
+    permission explicit_deny = denied_operation + operation_restriction->denied + organization->explicit_deny + parent->explicit_deny
+}
+
+definition team {
+    // iam_group supports nested groups; roots retain a direct tenant anchor.
+    // Parent may be a department or another team, matching the bounded,
+    // cycle-free hierarchy validated by IAM before projection.
+    relation organization: organization
+    relation parent: department | team
+    relation account_member: account
+    relation capability: scope_capability
+    relation category_capability: scope_capability
+    relation denied_operation: operation
+    relation operation_restriction: scope_operation
+
+    permission member = account_member
+    permission capability_grant = capability->grant
+    permission category_capability_grant = category_capability->grant
+    permission explicit_deny = denied_operation + operation_restriction->denied + organization->explicit_deny + parent->explicit_deny
+}
