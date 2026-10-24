@@ -31,3 +31,43 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Local Docker overrides and secrets ###
+.env
+.env.*
+!.env.example
+compose.override.yaml
+compose.override.yml
+*.pem
+*.key
+
+/.metrics-secrets/
+.keycloak/
+.secrets/
+user_details.json
+
+### Local credentials and certificates ###
+.aws/credentials
+.azure/
+.gcloud/
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+*.der
+
+### Local machine files ###
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+*.swp
+*.swo
+*~
+
+### Graphify local state ###
+/graphify-out/
+/.graphifyignore
+/.graphify-local.json

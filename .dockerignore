@@ -1,0 +1,16 @@
+**
+!Dockerfile
+!pom.xml
+!mvnw
+!.mvn/
+!.mvn/**
+!src/
+!src/**
+!docker/
+!docker/**
+# Private material is never part of a Docker build context.
+**/*.pem
+**/*.key
+**/.env*
+
+**/.metrics-secrets/**

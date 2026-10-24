@@ -1,0 +1,309 @@
+x-auth-common: &auth-common
+  image: unidocs-auth-service
+  build: {context: ., target: runtime}
+  cap_drop: [ALL]
+  read_only: true
+  security_opt: [no-new-privileges:true]
+  tmpfs: [/tmp]
+  restart: 'no'
+  healthcheck: &auth-healthcheck
+    interval: 15s
+    retries: 5
+    start_period: 300s
+    test: [CMD, curl, --fail, --silent, --show-error, 'http://127.0.0.1:9091/actuator/health/readiness']
+    timeout: 5s
+  logging:
+    driver: json-file
+    options: {max-file: '3', max-size: 10m}
+
+x-auth-environment: &auth-environment
+  ACCOUNT_NOTICE_SMTP_ENABLED: ${ACCOUNT_NOTICE_SMTP_ENABLED}
+  ACCOUNT_NOTICE_SMTP_FROM: ${ACCOUNT_NOTICE_SMTP_FROM}
+  ACCOUNT_RETENTION_MONTHS: ${ACCOUNT_RETENTION_MONTHS}
+  AUDIT_OUTBOX_TOPIC: ${AUDIT_OUTBOX_TOPIC}
+  AUTH_BROWSER_REFRESH_ALLOWED_ORIGINS: ${AUTH_BROWSER_REFRESH_ALLOWED_ORIGINS}
+  AUTH_DEVELOPER_OPERATOR_ENABLED: ${AUTH_DEVELOPER_OPERATOR_ENABLED:-false}
+  AUTH_DEVELOPER_RECOVERY_ORIGIN: ${AUTH_DEVELOPER_RECOVERY_ORIGIN:-}
+  AUTH_INFRASTRUCTURE_ENABLED: ${AUTH_INFRASTRUCTURE_ENABLED}
+  AUTH_METRICS_SCRAPE_TOKEN: ${AUTH_METRICS_SCRAPE_TOKEN}
+  AUTH_OTLP_TRACING_ENABLED: ${AUTH_OTLP_TRACING_ENABLED}
+  AUTH_OTLP_TRACING_ENDPOINT: ${SHARED_OTLP_TRACING_ENDPOINT:?Set SHARED_OTLP_TRACING_ENDPOINT in workspace .env}
+  AUTH_TRACING_SAMPLING_PROBABILITY: ${AUTH_TRACING_SAMPLING_PROBABILITY}
+  AUTHORIZATION_CACHE_ENABLED: ${AUTHORIZATION_CACHE_ENABLED}
+  AUTHORIZATION_CACHE_LISTENER_ENABLED: ${AUTHORIZATION_CACHE_LISTENER_ENABLED}
+  CAFFEINE_SPEC: ${CAFFEINE_SPEC}
+  DB_PASSWORD: ${DB_PASSWORD}
+  DB_URL: jdbc:mysql://${SHARED_MYSQL_HOST:?Set SHARED_MYSQL_HOST in workspace .env}:${SHARED_MYSQL_PORT:?Set SHARED_MYSQL_PORT in workspace .env}/${DB_NAME:?Set DB_NAME in Auth .env}?${DB_URL_OPTIONS}
+  DB_USERNAME: ${DB_USERNAME}
+  INTERNAL_AUTHORIZATION_AUDIENCE: ${INTERNAL_AUTHORIZATION_AUDIENCE}
+  INTERNAL_AUTHORIZATION_ENABLED: ${INTERNAL_AUTHORIZATION_ENABLED}
+  INTERNAL_AUTHORIZATION_ISSUER: ${INTERNAL_AUTHORIZATION_ISSUER}
+  INTERNAL_AUTHORIZATION_JWK_SET_URI: ${SHARED_KEYCLOAK_BASE_URL:?Set SHARED_KEYCLOAK_BASE_URL in workspace .env}/realms/${SHARED_KEYCLOAK_REALM:?Set SHARED_KEYCLOAK_REALM in workspace .env}/protocol/openid-connect/certs
+  INTERNAL_AUTHORIZATION_SERVICE_SUBJECTS: ${INTERNAL_AUTHORIZATION_SERVICE_SUBJECTS}
+  KEYCLOAK_TRUSTSTORE_PASSWORD: ${KEYCLOAK_TRUSTSTORE_PASSWORD}
+  JWT_ACTIVE_KID: ${JWT_ACTIVE_KID}
+  JWT_AUDIENCE: ${JWT_AUDIENCE}
+  JWT_ISSUER: ${JWT_ISSUER}
+  JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+  JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+  KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+  LOGIN_ATTACK_PROTECTION_ENABLED: ${LOGIN_ATTACK_PROTECTION_ENABLED}
+  MANAGEMENT_OPENTELEMETRY_TRACING_EXPORT_OTLP_HEADERS_AUTHORIZATION: Bearer ${APM_SECRET_TOKEN:?Run scripts/prepare-observability.ps1}
+  ORGANIZATION_INVITATION_SMTP_ENABLED: ${ORGANIZATION_INVITATION_SMTP_ENABLED}
+  ORGANIZATION_INVITATION_SMTP_FROM: ${ORGANIZATION_INVITATION_SMTP_FROM}
+  OUTBOX_ENABLED: ${OUTBOX_ENABLED}
+  OUTBOX_TOPIC: ${OUTBOX_TOPIC}
+  PASSWORD_RECOVERY_EMAIL_ENABLED: ${PASSWORD_RECOVERY_EMAIL_ENABLED}
+  REDIS_HOST: ${REDIS_HOST}
+  REDIS_PORT: ${REDIS_PORT}
+  REGISTRATION_SMTP_ENABLED: ${REGISTRATION_SMTP_ENABLED}
+  REGISTRATION_SMTP_FROM: ${REGISTRATION_SMTP_FROM}
+  SPRING_MAIL_HOST: ${SMTP_HOST}
+  SPRING_MAIL_PORT: ${SPRING_MAIL_PORT}
+  SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: ${SMTP_AUTH_ENABLED}
+  SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: ${SMTP_STARTTLS_ENABLED}
+  SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED: ${SMTP_STARTTLS_REQUIRED}
+  SPRING_MAIL_USERNAME: ${SMTP_USERNAME}
+  STUDENT_STORAGE_ACCESS_KEY: ${STUDENT_STORAGE_ACCESS_KEY}
+  STUDENT_STORAGE_CREATE_BUCKET: ${STUDENT_STORAGE_CREATE_BUCKET}
+  STUDENT_STORAGE_ENABLED: ${STUDENT_STORAGE_ENABLED}
+  STUDENT_STORAGE_ENDPOINT: ${SHARED_STORAGE_ENDPOINT:?Set SHARED_STORAGE_ENDPOINT in workspace .env}
+  STUDENT_STORAGE_SECRET_KEY: ${STUDENT_STORAGE_SECRET_KEY}
+
+x-auth-dependencies: &auth-dependencies
+  mysql: {condition: service_healthy}
+  redis: {condition: service_healthy}
+  kafka: {condition: service_healthy}
+  kafka-init: {condition: service_completed_successfully}
+  keycloak: {condition: service_healthy}
+  student-evidence: {condition: service_healthy}
+
+x-auth-secret-mounts: &auth-secret-mounts
+  - type: bind
+    source: ./.secrets/developer-activation
+    target: /run/secrets/application/developer-activation
+    read_only: true
+    bind: {create_host_path: false}
+  - type: bind
+    source: ./.secrets/auth-truststore.p12
+    target: /run/secrets/keycloak/auth-truststore.p12
+    read_only: true
+    bind: {create_host_path: false}
+  - type: bind
+    source: ./.secrets/auth-private.pem
+    target: /run/secrets/application/auth-private.pem
+    read_only: true
+    bind: {create_host_path: false}
+  - type: bind
+    source: ./.secrets/auth-public.pem
+    target: /run/secrets/application/auth-public.pem
+    read_only: true
+    bind: {create_host_path: false}
+
+services:
+  auth-service-dev:
+    <<: *auth-common
+    profiles: [dev]
+    env_file:
+      - ./.secrets/spicedb-client.env
+    depends_on:
+      <<: *auth-dependencies
+      mailpit: {condition: service_healthy}
+      spicedb-api-gateway: {condition: service_healthy}
+    environment:
+      <<: *auth-environment
+      AUTH_SERVICE_ENVIRONMENT: dev
+      SPRING_PROFILES_ACTIVE: dev,metrics
+      AUTH_API_DOCS_ENABLED: 'true'
+      AUTH_LOG_LEVEL: ${APPLICATION_LOG_LEVEL:-INFO}
+      LOGGING_LEVEL_ROOT: INFO
+      MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
+      AUTH_MANAGEMENT_SCRAPE_ALLOW_PRIVATE_NETWORK: 'true'
+    networks:
+      unidocs_local_network:
+        aliases: [auth-service]
+    ports: ['127.0.0.1:8080:8080']
+    volumes: *auth-secret-mounts
+
+  auth-service-test:
+    <<: *auth-common
+    profiles: [test]
+    env_file:
+      - ./.secrets/spicedb-client.env
+      - ./.secrets/spicedb-projection.env
+    image: unidocs-auth-service-test
+    build: {context: ., target: test-runtime}
+    read_only: false
+    depends_on:
+      <<: *auth-dependencies
+      mailpit: {condition: service_healthy}
+      spicedb-api-gateway: {condition: service_healthy}
+    environment:
+      <<: *auth-environment
+      AUTH_SERVICE_ENVIRONMENT: test
+      AUTH_DEVELOPER_OPERATOR_ENABLED: 'true'
+      AUTH_DEVELOPER_BOOTSTRAP_ENABLED: 'true'
+      AUTH_DEVELOPER_RECOVERY_ORIGIN: http://127.0.0.1:4200
+      AUTH_SPICEDB_PROJECTION_ENABLED: ${AUTH_TEST_SPICEDB_PROJECTION_ENABLED:-false}
+      AUTH_SPICEDB_CANARY_ENABLED: ${AUTH_TEST_SPICEDB_CANARY_ENABLED:-false}
+      AUTH_SPICEDB_CANARY_ORGANIZATION_IDS: ${AUTH_TEST_SPICEDB_CANARY_ORGANIZATION_IDS:-}
+      AUTH_SPICEDB_CANARY_EMPLOYEE_CREATE_ENABLED: ${AUTH_TEST_SPICEDB_CANARY_EMPLOYEE_CREATE_ENABLED:-false}
+      AUTH_SPICEDB_CANARY_MANAGEMENT_ENABLED: ${AUTH_TEST_SPICEDB_CANARY_MANAGEMENT_ENABLED:-false}
+      AUTH_SPICEDB_CANARY_ENFORCEMENT_ENABLED: ${AUTH_TEST_SPICEDB_CANARY_ENFORCEMENT_ENABLED:-false}
+      AUTHORIZATION_CACHE_LISTENER_ENABLED: ${AUTH_TEST_AUTHORIZATION_CACHE_LISTENER_ENABLED:-${AUTHORIZATION_CACHE_LISTENER_ENABLED}}
+      SPRING_PROFILES_ACTIVE: dev,test,phase1-acceptance,metrics
+      AUTH_PERSONAL_GROUPS_TEST_NOTICE_SECONDS: ${AUTH_PERSONAL_GROUPS_TEST_NOTICE_SECONDS:-604800}
+      AUTH_API_DOCS_ENABLED: 'true'
+      AUTH_LOG_LEVEL: ${APPLICATION_LOG_LEVEL:-INFO}
+      LOGGING_LEVEL_ROOT: INFO
+      MANAGEMENT_SERVER_ADDRESS: 0.0.0.0
+      AUTH_MANAGEMENT_SCRAPE_ALLOW_PRIVATE_NETWORK: 'true'
+      DB_URL: jdbc:mysql://${SHARED_MYSQL_HOST:?Set SHARED_MYSQL_HOST in workspace .env}:${SHARED_MYSQL_PORT:?Set SHARED_MYSQL_PORT in workspace .env}/${AUTH_TEST_DB_NAME:?Set AUTH_TEST_DB_NAME in Auth .env}?${AUTH_TEST_DB_URL_OPTIONS}
+      DB_USERNAME: ${AUTH_TEST_DB_USERNAME}
+      DB_PASSWORD: ${AUTH_TEST_DB_PASSWORD}
+      AUTH_TEST_DB_URL: jdbc:mysql://${SHARED_MYSQL_HOST:?Set SHARED_MYSQL_HOST in workspace .env}:${SHARED_MYSQL_PORT:?Set SHARED_MYSQL_PORT in workspace .env}/${AUTH_TEST_DB_NAME:?Set AUTH_TEST_DB_NAME in Auth .env}?${AUTH_TEST_DB_URL_OPTIONS}
+      AUTH_TEST_DB_USERNAME: ${AUTH_TEST_DB_USERNAME}
+      AUTH_TEST_DB_PASSWORD: ${AUTH_TEST_DB_PASSWORD}
+      SPRING_DATA_REDIS_DATABASE: ${AUTH_TEST_REDIS_DATABASE:-1}
+      JWT_ISSUER: ${AUTH_TEST_JWT_ISSUER:-urn:unidocs:auth:test}
+      JWT_AUDIENCE: ${AUTH_TEST_JWT_AUDIENCE:-urn:unidocs:drive:test}
+      OUTBOX_TOPIC: ${AUTH_TEST_OUTBOX_TOPIC:-iam.test.domain-events.v1}
+      AUDIT_OUTBOX_TOPIC: ${AUTH_TEST_AUDIT_OUTBOX_TOPIC:-iam.test.security-audit.v1}
+      STUDENT_STORAGE_BUCKET: ${AUTH_TEST_STUDENT_STORAGE_BUCKET:-student-evidence-test}
+      STUDENT_STORAGE_CREATE_BUCKET: 'true'
+      TESTCONTAINERS_REUSE_ENABLE: ${TESTCONTAINERS_REUSE_ENABLE}
+      TESTCONTAINERS_RYUK_DISABLED: ${TESTCONTAINERS_RYUK_DISABLED}
+    ports: ['127.0.0.1:8080:8080']
+    networks: [unidocs_local_network]
+    volumes:
+      - type: bind
+        source: .
+        target: /workspace
+        read_only: true
+        bind: {create_host_path: false}
+      - auth-test-target:/workspace/target
+      - auth-test-maven-cache:/root/.m2
+
+      - type: bind
+        source: ./.secrets/test-password
+        target: /run/secrets/test/password
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./.secrets/developer-activation
+        target: /run/secrets/application/developer-activation
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./.secrets/auth-truststore.p12
+        target: /run/secrets/keycloak/auth-truststore.p12
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./.secrets/auth-private.pem
+        target: /run/secrets/application/auth-private.pem
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./.secrets/auth-public.pem
+        target: /run/secrets/application/auth-public.pem
+        read_only: true
+        bind: {create_host_path: false}
+
+  spicedb-api-gateway:
+    image: unidocs-auth-service
+    build: {context: ., target: runtime}
+    profiles: [dev, test]
+    entrypoint: [java, -jar, /app/spicedb-api-gateway.jar]
+    env_file:
+      - ./.secrets/spicedb-gateway.env
+    depends_on:
+      spicedb: {condition: service_healthy}
+    cap_drop: [ALL]
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    restart: unless-stopped
+    expose: ['50051']
+    healthcheck:
+      interval: 10s
+      retries: 3
+      start_period: 10s
+      test: [CMD, curl, --fail, --silent, http://127.0.0.1:8080/health]
+      timeout: 3s
+    networks: [unidocs_local_network]
+
+  auth-service-offline:
+    <<: *auth-common
+    profiles: [offline]
+    network_mode: bridge
+    environment:
+      SPRING_PROFILES_ACTIVE: offline
+      AUTH_API_DOCS_ENABLED: 'true'
+      AUTH_LOG_LEVEL: ${APPLICATION_LOG_LEVEL:-INFO}
+      LOGGING_LEVEL_ROOT: INFO
+    ports: ['127.0.0.1:8080:8080']
+    healthcheck:
+      <<: *auth-healthcheck
+      test: [CMD, curl, --fail, --silent, --show-error, 'http://127.0.0.1:8080/actuator/health/readiness']
+
+  auth-service-prod:
+    <<: *auth-common
+    profiles: [prod]
+    depends_on: *auth-dependencies
+    restart: unless-stopped
+    environment:
+      <<: *auth-environment
+      AUTH_SERVICE_ENVIRONMENT: prod
+      AUTH_OTLP_TRACING_ENABLED: 'true'
+      SPRING_PROFILES_ACTIVE: prod,metrics
+      AUTH_API_DOCS_ENABLED: 'false'
+      AUTH_LOG_LEVEL: INFO
+      LOGGING_LEVEL_ROOT: INFO
+      AUTH_TLS_STORE_PASSWORD: ${AUTH_TLS_STORE_PASSWORD:-}
+      MANAGEMENT_SERVER_ADDRESS: 127.0.0.1
+      AUTH_MANAGEMENT_SCRAPE_ALLOW_PRIVATE_NETWORK: 'false'
+      SPRING_MAIL_HOST: ${AUTH_PROD_SMTP_HOST:-}
+      SPRING_MAIL_PORT: ${AUTH_PROD_SMTP_PORT:-587}
+      SPRING_MAIL_USERNAME: ${AUTH_PROD_SMTP_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${AUTH_PROD_SMTP_PASSWORD:-}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: 'true'
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: 'true'
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_REQUIRED: 'true'
+    ports: ['127.0.0.1:8080:8080']
+    networks:
+      unidocs_local_network:
+        aliases: [auth-service, prometheus]
+    logging: {driver: none}
+    volumes:
+      - type: bind
+        source: ./.secrets/developer-activation
+        target: /run/secrets/application/developer-activation
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./.secrets/auth-truststore.p12
+        target: /run/secrets/keycloak/auth-truststore.p12
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./.secrets/auth-private.pem
+        target: /run/secrets/application/auth-private.pem
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./.secrets/auth-public.pem
+        target: /run/secrets/application/auth-public.pem
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ./.secrets/auth-local-tls.p12
+        target: /run/secrets/application/auth-local-tls.p12
+        read_only: true
+        bind: {create_host_path: false}
+      - auth-application-logs:/var/log/unidocs
+
+volumes:
+  auth-application-logs: {name: auth-application-logs}
+  auth-test-maven-cache: {name: auth-test-maven-cache}
+  auth-test-target: {name: auth-test-target}
