@@ -1,0 +1,65 @@
+---
+all:
+  vars:
+    ansible_user: ec2-user
+    ansible_ssh_private_key_file: "{{ lookup('env', 'ANSIBLE_SSH_PRIVATE_KEY') }}"
+    ansible_python_interpreter: /usr/bin/python3
+    aws_region: eu-central-1
+  children:
+    auth:
+      hosts:
+        auth-prod-1:
+          ansible_host: 10.0.10.11
+          service_key: auth
+    document:
+      hosts:
+        document-prod-1:
+          ansible_host: 10.0.10.12
+          service_key: document
+    frontend:
+      hosts:
+        frontend-prod-1:
+          ansible_host: 10.0.10.13
+          service_key: frontend
+    data:
+      hosts:
+        mysql-prod-1:
+          ansible_host: 10.0.20.11
+          service_key: mysql
+        redis-prod-1:
+          ansible_host: 10.0.20.12
+          service_key: redis
+        kafka-prod-1:
+          ansible_host: 10.0.20.13
+          service_key: kafka
+        elasticsearch-prod-1:
+          ansible_host: 10.0.20.14
+          service_key: elasticsearch
+        spicedb-prod-1:
+          ansible_host: 10.0.20.15
+          service_key: spicedb
+    storage:
+      hosts:
+        object-storage-prod-1:
+          ansible_host: 10.0.20.16
+          service_key: student_evidence
+    identity:
+      hosts:
+        keycloak-prod-1:
+          ansible_host: 10.0.30.11
+          service_key: keycloak
+    observability:
+      hosts:
+        observability-prod-1:
+          ansible_host: 10.0.30.12
+          service_key: observability
+    development_tools:
+      hosts:
+        mailpit-dev-1:
+          ansible_host: 10.0.30.13
+          service_key: mailpit
+    scanning:
+      hosts:
+        virus-scanner-prod-1:
+          ansible_host: 10.0.30.14
+          service_key: virus_scanner
