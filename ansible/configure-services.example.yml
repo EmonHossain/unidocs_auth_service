@@ -1,0 +1,186 @@
+---
+- name: Configure native UniDocs service on its dedicated EC2 instance
+  hosts: all
+  become: true
+  gather_facts: true
+  serial: 1
+  vars:
+    service_key: "{{ hostvars[inventory_hostname].service_key | default(hostvars[inventory_hostname].tags.Service) }}"
+    service_root: /opt/unidocs
+    service_environment: {}
+    service_users:
+      auth: auth
+      document: document
+      frontend: nginx
+      mysql: mysql
+      redis: redis
+      kafka: kafka
+      elasticsearch: elasticsearch
+      spicedb: spicedb
+      student-evidence: student-evidence
+      keycloak: keycloak
+      prometheus: prometheus
+      grafana: grafana
+      kibana: kibana
+      apm-server: apm-server
+      filebeat: filebeat
+      virus-scanner: clamav
+    service_ports_by_name:
+      auth: [8080]
+      document: [8081]
+      frontend: [80, 443]
+      mysql: [3306]
+      redis: [6379]
+      kafka: [9092]
+      elasticsearch: [9200, 9300]
+      spicedb: [50051]
+      student-evidence: [9000, 9001]
+      keycloak: [8443]
+      prometheus: [9090]
+      grafana: [3000]
+      kibana: [5601]
+      apm-server: [8200]
+      filebeat: []
+      virus-scanner: [3310]
+    service_packages:
+      auth: [java-25-amazon-corretto-headless]
+      document: [java-25-amazon-corretto-headless]
+      frontend: [nginx]
+      mysql: [mysql-server]
+      redis: [redis]
+      kafka: [java-25-amazon-corretto-headless]
+      elasticsearch: [java-25-amazon-corretto-headless]
+      spicedb: []
+      student-evidence: []
+      keycloak: [java-25-amazon-corretto-headless]
+      prometheus: []
+      grafana: []
+      kibana: []
+      apm-server: []
+      filebeat: []
+      virus-scanner: [clamav, clamav-update]
+    artifact_map:
+      auth: auth-service.jar
+      document: document-service.jar
+      frontend: frontend-dist.tar.gz
+      kafka: kafka.tgz
+      elasticsearch: elasticsearch.rpm
+      spicedb: spicedb
+      student-evidence: rustfs
+      keycloak: keycloak.tar.gz
+      prometheus: prometheus.tar.gz
+      grafana: grafana.rpm
+      kibana: kibana.rpm
+      apm-server: apm-server.rpm
+      filebeat: filebeat.rpm
+
+  pre_tasks:
+    - name: Validate service host mapping and private address
+      ansible.builtin.assert:
+        that:
+          - service_key in service_ports_by_name
+          - ansible_host is match('^(10\\.|172\\.(1[6-9]|2[0-9]|3[0-1])\\.|192\\.168\\.)')
+
+  tasks:
+    - name: Install native operating system service packages
+      ansible.builtin.package:
+        name: "{{ service_packages[service_key] }}"
+        state: present
+      when: service_packages[service_key] | length > 0
+
+    - name: Create dedicated non-login service account
+      ansible.builtin.user:
+        name: "{{ service_users[service_key] }}"
+        system: true
+        shell: /sbin/nologin
+        home: "/var/lib/{{ service_key }}"
+        create_home: true
+      when: service_key in ['auth', 'document', 'kafka', 'elasticsearch', 'spicedb', 'student-evidence', 'keycloak', 'prometheus', 'grafana', 'kibana', 'apm-server', 'filebeat', 'virus-scanner']
+
+    - name: Create service configuration, data, and binary directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner | default('root') }}"
+        group: "{{ item.group | default('root') }}"
+        mode: "{{ item.mode | default('0750') }}"
+      loop:
+        - {path: "{{ service_root }}/{{ service_key }}", owner: "{{ service_users[service_key] }}", group: "{{ service_users[service_key] }}", mode: '0750'}
+        - {path: /etc/unidocs}
+        - {path: /var/lib/unidocs}
+
+    - name: Retrieve service configuration from AWS Systems Manager Parameter Store
+      amazon.aws.aws_ssm:
+        name: "{{ aws_ssm_parameter_names[service_key] }}"
+        region: "{{ aws_region }}"
+        decrypt: true
+      register: service_ssm_value
+      delegate_to: localhost
+      become: false
+      no_log: true
+      when: service_key in aws_ssm_parameter_names
+
+    - name: Install service environment file
+      ansible.builtin.copy:
+        content: "{{ service_ssm_value.value }}\n"
+        dest: "/etc/unidocs/{{ service_key }}.env"
+        owner: root
+        group: root
+        mode: '0600'
+      no_log: true
+      when: service_key in aws_ssm_parameter_names
+
+    - name: Copy versioned service executable from deployment artifacts
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/artifacts/{{ service_key }}/{{ artifact_map[service_key] }}"
+        dest: "{{ service_root }}/{{ service_key }}/{{ artifact_map[service_key] }}"
+        owner: root
+        group: root
+        mode: '0750'
+      when: service_key in artifact_map
+      notify: Restart configured service
+
+    - name: Install native service binary from deployment artifacts
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/artifacts/{{ service_key }}/{{ artifact_map[service_key] }}"
+        dest: "/usr/local/bin/{{ service_key }}"
+        owner: root
+        group: root
+        mode: '0755'
+      when: service_key in ['spicedb', 'student-evidence']
+      notify: Restart configured service
+
+    - name: Configure application service unit
+      ansible.builtin.template:
+        src: templates/unidocs-service.service.j2
+        dest: "/etc/systemd/system/unidocs-{{ service_key }}.service"
+        owner: root
+        group: root
+        mode: '0644'
+      when: service_key in ['auth', 'document']
+      notify: Restart configured service
+
+    - name: Configure service to bind to its inventory private address
+      ansible.builtin.set_fact:
+        service_private_address: "{{ ansible_host }}"
+
+    - name: Configure local firewall allow-list for VPC service clients
+      ansible.builtin.debug:
+        msg: "Permit only required service ports {{ service_ports_by_name[service_key] }} from approved UniDocs security groups; AWS security groups remain the network enforcement boundary."
+
+    - name: Enable and start configured service unit
+      ansible.builtin.systemd:
+        name: "unidocs-{{ service_key }}"
+        daemon_reload: true
+        enabled: true
+        state: started
+      when: service_key in ['auth', 'document', 'spicedb', 'student-evidence']
+
+  handlers:
+    - name: Restart configured service
+      ansible.builtin.systemd:
+        name: "unidocs-{{ service_key }}"
+        daemon_reload: true
+        enabled: true
+        state: restarted
+      when: service_key in ['auth', 'document', 'spicedb', 'student-evidence']

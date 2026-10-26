@@ -1,0 +1,17 @@
+plugin: amazon.aws.aws_ec2
+regions:
+  - eu-central-1
+filters:
+  instance-state-name: running
+  "tag:Application": unidocs
+  "tag:Environment": production
+hostnames:
+  - private-ip-address
+compose:
+  ansible_host: private_ip_address
+keyed_groups:
+  - key: tags.Service
+    prefix: service
+  - key: tags.Environment
+    prefix: environment
+strict: false

@@ -1,0 +1,27 @@
+[Unit]
+Description=UniDocs {{ service_key }} service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ service_users[service_key] }}
+Group={{ service_users[service_key] }}
+EnvironmentFile=-/etc/unidocs/{{ service_key }}.env
+WorkingDirectory={{ service_root }}/{{ service_key }}
+{% if service_key in ['auth', 'document'] %}ExecStart=/usr/bin/java -XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75 -jar {{ service_root }}/{{ service_key }}/{{ artifact_map[service_key] }}
+{% elif service_key == 'spicedb' %}ExecStart=/usr/local/bin/spicedb serve --grpc-preshared-key-file=/etc/unidocs/spicedb.key --datastore-engine=mysql --datastore-conn-uri={{ spicedb_datastore_uri }}
+{% elif service_key == 'student-evidence' %}ExecStart=/usr/local/bin/student-evidence server --address={{ ansible_host }}:9000 --console-address={{ ansible_host }}:9001
+{% endif %}
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/{{ service_key }} /var/log/unidocs {{ service_root }}/{{ service_key }}
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

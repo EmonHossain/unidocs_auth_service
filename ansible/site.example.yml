@@ -1,0 +1,207 @@
+---
+- name: Provision one AWS EC2 instance per UniDocs service
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    aws_region: eu-central-1
+    vpc_name: unidocs-prod
+    vpc_cidr: 10.0.0.0/16
+    public_subnet_cidr: 10.0.0.0/24
+    private_subnets:
+      - {name: app-a, cidr: 10.0.10.0/24, az: eu-central-1a}
+      - {name: data-a, cidr: 10.0.20.0/24, az: eu-central-1a}
+      - {name: platform-a, cidr: 10.0.30.0/24, az: eu-central-1a}
+      - {name: app-b, cidr: 10.0.11.0/24, az: eu-central-1b}
+      - {name: data-b, cidr: 10.0.21.0/24, az: eu-central-1b}
+      - {name: platform-b, cidr: 10.0.31.0/24, az: eu-central-1b}
+    ec2_key_name: unidocs-prod
+    ec2_image_id: ami-0f3a440bbafe7492a
+    instance_profile_name: unidocs-ec2-ssm
+    service_instances:
+      - {name: auth, hostname: auth-prod-1, subnet: 10.0.10.0/24, private_ip: 10.0.10.11, instance_type: t3.large, ports: [8080, 9091]}
+      - {name: document, hostname: document-prod-1, subnet: 10.0.10.0/24, private_ip: 10.0.10.12, instance_type: t3.large, ports: [8081, 9092, 3310]}
+      - {name: frontend, hostname: frontend-prod-1, subnet: 10.0.10.0/24, private_ip: 10.0.10.13, instance_type: t3.small, ports: [80, 443]}
+      - {name: mysql, hostname: mysql-prod-1, subnet: 10.0.20.0/24, private_ip: 10.0.20.11, instance_type: r6i.large, ports: [3306]}
+      - {name: redis, hostname: redis-prod-1, subnet: 10.0.20.0/24, private_ip: 10.0.20.12, instance_type: r6i.large, ports: [6379]}
+      - {name: kafka, hostname: kafka-prod-1, subnet: 10.0.20.0/24, private_ip: 10.0.20.13, instance_type: m6i.large, ports: [9092, 9093]}
+      - {name: elasticsearch, hostname: elasticsearch-prod-1, subnet: 10.0.20.0/24, private_ip: 10.0.20.14, instance_type: r6i.xlarge, ports: [9200, 9300]}
+      - {name: spicedb, hostname: spicedb-prod-1, subnet: 10.0.20.0/24, private_ip: 10.0.20.15, instance_type: t3.large, ports: [50051, 8443]}
+      - {name: student-evidence, hostname: student-evidence-prod-1, subnet: 10.0.20.0/24, private_ip: 10.0.20.16, instance_type: t3.large, ports: [9000, 9001]}
+      - {name: keycloak, hostname: keycloak-prod-1, subnet: 10.0.30.0/24, private_ip: 10.0.30.11, instance_type: t3.large, ports: [8443]}
+      - {name: prometheus, hostname: prometheus-prod-1, subnet: 10.0.30.0/24, private_ip: 10.0.30.12, instance_type: t3.medium, ports: [9090]}
+      - {name: grafana, hostname: grafana-prod-1, subnet: 10.0.30.0/24, private_ip: 10.0.30.13, instance_type: t3.small, ports: [3000]}
+      - {name: kibana, hostname: kibana-prod-1, subnet: 10.0.30.0/24, private_ip: 10.0.30.14, instance_type: t3.medium, ports: [5601]}
+      - {name: apm-server, hostname: apm-server-prod-1, subnet: 10.0.30.0/24, private_ip: 10.0.30.15, instance_type: t3.small, ports: [8200]}
+      - {name: filebeat, hostname: filebeat-prod-1, subnet: 10.0.30.0/24, private_ip: 10.0.30.16, instance_type: t3.small, ports: []}
+      - {name: virus-scanner, hostname: virus-scanner-prod-1, subnet: 10.0.30.0/24, private_ip: 10.0.30.17, instance_type: t3.large, ports: [3310]}
+
+  tasks:
+    - name: Create production VPC
+      amazon.aws.ec2_vpc_net:
+        name: "{{ vpc_name }}"
+        cidr_block: "{{ vpc_cidr }}"
+        region: "{{ aws_region }}"
+        dns_support: true
+        dns_hostnames: true
+        state: present
+        tags: {Environment: production, Application: unidocs, ManagedBy: ansible}
+      register: unidocs_vpc
+
+    - name: Create internet gateway
+      amazon.aws.ec2_vpc_igw:
+        vpc_id: "{{ unidocs_vpc.vpc.id }}"
+        region: "{{ aws_region }}"
+        state: present
+        tags: {Name: unidocs-prod-igw, Environment: production}
+      register: unidocs_igw
+
+    - name: Create public subnet
+      amazon.aws.ec2_vpc_subnet:
+        vpc_id: "{{ unidocs_vpc.vpc.id }}"
+        cidr: "{{ public_subnet_cidr }}"
+        az: eu-central-1a
+        region: "{{ aws_region }}"
+        map_public: true
+        state: present
+        tags: {Name: unidocs-prod-public-a, Tier: public}
+      register: public_subnet
+
+    - name: Create public route table
+      amazon.aws.ec2_vpc_route_table:
+        vpc_id: "{{ unidocs_vpc.vpc.id }}"
+        region: "{{ aws_region }}"
+        subnets: ["{{ public_subnet.subnet.id }}"]
+        routes:
+          - dest: 0.0.0.0/0
+            gateway_id: "{{ unidocs_igw.gateway_id }}"
+        state: present
+        tags: {Name: unidocs-prod-public, Tier: public}
+
+    - name: Create private service subnets
+      amazon.aws.ec2_vpc_subnet:
+        vpc_id: "{{ unidocs_vpc.vpc.id }}"
+        cidr: "{{ item.cidr }}"
+        az: "{{ item.az }}"
+        region: "{{ aws_region }}"
+        map_public: false
+        state: present
+        tags: {Name: "unidocs-prod-{{ item.name }}", Tier: private}
+      loop: "{{ private_subnets }}"
+      register: private_subnet_results
+
+    - name: Create NAT gateway address
+      amazon.aws.ec2_eip:
+        region: "{{ aws_region }}"
+        in_vpc: true
+        state: present
+        tags: {Name: unidocs-prod-nat-eip}
+      register: nat_eip
+
+    - name: Create NAT gateway
+      amazon.aws.ec2_vpc_nat_gateway:
+        subnet_id: "{{ public_subnet.subnet.id }}"
+        allocation_id: "{{ nat_eip.allocation_id }}"
+        region: "{{ aws_region }}"
+        state: present
+        wait: true
+        tags: {Name: unidocs-prod-nat-a}
+      register: nat_gateway
+
+    - name: Create private route tables with outbound NAT
+      amazon.aws.ec2_vpc_route_table:
+        vpc_id: "{{ unidocs_vpc.vpc.id }}"
+        region: "{{ aws_region }}"
+        subnets: "{{ private_subnet_results.results | map(attribute='subnet.id') | list }}"
+        routes:
+          - dest: 0.0.0.0/0
+            nat_gateway_id: "{{ nat_gateway.nat_gateway_id }}"
+        state: present
+        tags: {Name: unidocs-prod-private, Tier: private}
+
+    - name: Create service-specific security groups
+      amazon.aws.ec2_security_group:
+        name: "unidocs-prod-{{ item.name }}"
+        description: "Private security group for {{ item.name }} service instance"
+        vpc_id: "{{ unidocs_vpc.vpc.id }}"
+        region: "{{ aws_region }}"
+        rules: "{{ ([{'proto': 'tcp', 'ports': item.ports, 'cidr_ip': vpc_cidr}] if item.ports | length > 0 else []) + [{'proto': 'tcp', 'ports': [22], 'cidr_ip': public_subnet_cidr}] }}"
+        rules_egress:
+          - {proto: -1, cidr_ip: "{{ vpc_cidr }}"}
+          - {proto: tcp, ports: [443], cidr_ip: 0.0.0.0/0}
+        state: present
+        tags:
+          Environment: production
+          Application: unidocs
+          Service: "{{ item.name }}"
+      loop: "{{ service_instances }}"
+
+    - name: Create application instance security group
+      amazon.aws.ec2_security_group:
+        name: unidocs-prod-app
+        description: Private application tier
+        vpc_id: "{{ unidocs_vpc.vpc.id }}"
+        region: "{{ aws_region }}"
+        rules:
+          - {proto: tcp, ports: [8080, 8081, 80, 443], cidr_ip: 10.0.0.0/16}
+          - {proto: tcp, ports: [22], cidr_ip: 10.0.0.0/24}
+        rules_egress: [{proto: -1, cidr_ip: 0.0.0.0/0}]
+        state: present
+        tags: {Environment: production, Application: unidocs}
+
+    - name: Create data instance security group
+      amazon.aws.ec2_security_group:
+        name: unidocs-prod-data
+        description: Private data services reachable only from UniDocs VPC
+        vpc_id: "{{ unidocs_vpc.vpc.id }}"
+        region: "{{ aws_region }}"
+        rules:
+          - {proto: tcp, ports: [3306, 6379, 9092, 9093, 9200, 9300, 50051, 8443, 9000, 9001], cidr_ip: 10.0.0.0/16}
+          - {proto: tcp, ports: [22], cidr_ip: 10.0.0.0/24}
+        rules_egress: [{proto: -1, cidr_ip: 0.0.0.0/0}]
+        state: present
+        tags: {Environment: production, Application: unidocs}
+
+    - name: Create platform instance security group
+      amazon.aws.ec2_security_group:
+        name: unidocs-prod-platform
+        description: Private identity and observability services
+        vpc_id: "{{ unidocs_vpc.vpc.id }}"
+        region: "{{ aws_region }}"
+        rules:
+          - {proto: tcp, ports: [3000, 5601, 8200, 9090, 8443, 3310], cidr_ip: 10.0.0.0/16}
+          - {proto: tcp, ports: [22], cidr_ip: 10.0.0.0/24}
+        rules_egress: [{proto: -1, cidr_ip: 0.0.0.0/0}]
+        state: present
+        tags: {Environment: production, Application: unidocs}
+
+    - name: Launch one EC2 instance for every persistent service
+      amazon.aws.ec2_instance:
+        name: "unidocs-prod-{{ item.name }}"
+        key_name: "{{ ec2_key_name }}"
+        image_id: "{{ ec2_image_id }}"
+        instance_type: "{{ item.instance_type | default(ec2_instance_type) }}"
+        region: "{{ aws_region }}"
+        vpc_subnet_id: "{{ (private_subnet_results.results | selectattr('item.item.cidr', 'equalto', item.subnet) | map(attribute='subnet.id') | first) }}"
+        private_ip_address: "{{ item.private_ip }}"
+        security_groups: ["unidocs-prod-{{ item.name }}"]
+        network:
+          assign_public_ip: false
+        iam_instance_profile: "{{ instance_profile_name }}"
+        ebs_optimized: true
+        volumes:
+          - device_name: /dev/xvda
+            ebs:
+              volume_type: gp3
+              volume_size: 40
+              encrypted: true
+              delete_on_termination: false
+        tags:
+          Name: "unidocs-prod-{{ item.name }}"
+          Service: "{{ item.name }}"
+          Environment: production
+          ManagedBy: ansible
+        state: running
+        wait: true
+      loop: "{{ service_instances }}"
+      register: launched_instances

@@ -1,0 +1,38 @@
+---
+aws_region: eu-central-1
+deployment_root: /opt/unidocs
+service_ports:
+  auth: [8080, 9091]
+  document: [8081, 9092]
+  frontend: [80, 443]
+  mysql: [3306]
+  redis: [6379]
+  kafka: [9092, 9093]
+  elasticsearch: [9200, 9300]
+  spicedb: [50051]
+  student-evidence: [9000, 9001]
+  keycloak: [8443]
+  prometheus: [9090]
+  grafana: [3000]
+  kibana: [5601]
+  apm-server: [8200]
+  filebeat: []
+  virus-scanner: [3310]
+service_versions:
+  mysql: '8.4.8'
+  redis: '8.2.10'
+  kafka: '4.1.2'
+  elasticsearch: '9.5.5'
+  keycloak: '26.8.0'
+  grafana: '13.2.2'
+  spicedb: '1.56.2'
+  student-evidence: '1.0.1'
+  virus-scanner: '1.4.6'
+aws_ssm_parameter_names:
+  auth: /unidocs/prod/auth/env
+  document: /unidocs/prod/document/env
+  mysql: /unidocs/prod/mysql/env
+  redis: /unidocs/prod/redis/env
+  kafka: /unidocs/prod/kafka/env
+  keycloak: /unidocs/prod/keycloak/env
+  spicedb: /unidocs/prod/spicedb/env

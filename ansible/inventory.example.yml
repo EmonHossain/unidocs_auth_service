@@ -8,58 +8,49 @@ all:
   children:
     auth:
       hosts:
-        auth-prod-1:
-          ansible_host: 10.0.10.11
-          service_key: auth
+        auth-prod-1: {ansible_host: 10.0.10.11, service_key: auth}
     document:
       hosts:
-        document-prod-1:
-          ansible_host: 10.0.10.12
-          service_key: document
+        document-prod-1: {ansible_host: 10.0.10.12, service_key: document}
     frontend:
       hosts:
-        frontend-prod-1:
-          ansible_host: 10.0.10.13
-          service_key: frontend
-    data:
+        frontend-prod-1: {ansible_host: 10.0.10.13, service_key: frontend}
+    mysql:
       hosts:
-        mysql-prod-1:
-          ansible_host: 10.0.20.11
-          service_key: mysql
-        redis-prod-1:
-          ansible_host: 10.0.20.12
-          service_key: redis
-        kafka-prod-1:
-          ansible_host: 10.0.20.13
-          service_key: kafka
-        elasticsearch-prod-1:
-          ansible_host: 10.0.20.14
-          service_key: elasticsearch
-        spicedb-prod-1:
-          ansible_host: 10.0.20.15
-          service_key: spicedb
-    storage:
+        mysql-prod-1: {ansible_host: 10.0.20.11, service_key: mysql}
+    redis:
       hosts:
-        object-storage-prod-1:
-          ansible_host: 10.0.20.16
-          service_key: student_evidence
-    identity:
+        redis-prod-1: {ansible_host: 10.0.20.12, service_key: redis}
+    kafka:
       hosts:
-        keycloak-prod-1:
-          ansible_host: 10.0.30.11
-          service_key: keycloak
-    observability:
+        kafka-prod-1: {ansible_host: 10.0.20.13, service_key: kafka}
+    elasticsearch:
       hosts:
-        observability-prod-1:
-          ansible_host: 10.0.30.12
-          service_key: observability
-    development_tools:
+        elasticsearch-prod-1: {ansible_host: 10.0.20.14, service_key: elasticsearch}
+    spicedb:
       hosts:
-        mailpit-dev-1:
-          ansible_host: 10.0.30.13
-          service_key: mailpit
-    scanning:
+        spicedb-prod-1: {ansible_host: 10.0.20.15, service_key: spicedb}
+    student_evidence:
       hosts:
-        virus-scanner-prod-1:
-          ansible_host: 10.0.30.14
-          service_key: virus_scanner
+        student-evidence-prod-1: {ansible_host: 10.0.20.16, service_key: student-evidence}
+    keycloak:
+      hosts:
+        keycloak-prod-1: {ansible_host: 10.0.30.11, service_key: keycloak}
+    prometheus:
+      hosts:
+        prometheus-prod-1: {ansible_host: 10.0.30.12, service_key: prometheus}
+    grafana:
+      hosts:
+        grafana-prod-1: {ansible_host: 10.0.30.13, service_key: grafana}
+    kibana:
+      hosts:
+        kibana-prod-1: {ansible_host: 10.0.30.14, service_key: kibana}
+    apm_server:
+      hosts:
+        apm-server-prod-1: {ansible_host: 10.0.30.15, service_key: apm-server}
+    filebeat:
+      hosts:
+        filebeat-prod-1: {ansible_host: 10.0.30.16, service_key: filebeat}
+    virus_scanner:
+      hosts:
+        virus-scanner-prod-1: {ansible_host: 10.0.30.17, service_key: virus-scanner}
