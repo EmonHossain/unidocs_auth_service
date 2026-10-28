@@ -1,0 +1,10 @@
+apm-server:
+  host: '0.0.0.0:8200'
+  auth.secret_token: '${APM_SECRET_TOKEN}'
+output.elasticsearch:
+  hosts: ['http://elasticsearch:9200']
+  username: admin
+  password: '${TELEMETRY_WRITER_PASSWORD}'
+queue.mem.events: 1024
+logging.level: warning
+logging.to_files: false
