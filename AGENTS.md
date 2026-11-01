@@ -13,7 +13,7 @@
 - Reuse context already available. Avoid repeated searches, reads, and tests without a reason.
 - Use direct patches for routine code edits. Do not write unnecessary Python or other helper scripts to change a single line or make a small Java edit; use scripts only when a repetitive transformation clearly warrants them.
 - Prefer one agent. Delegate only clearly independent work when expected benefit outweighs extra context, coordination, and tool cost; never overlap edits.
-- Make targeted changes; run relevant tests, including negative-path tests for security-sensitive behavior. Do not skip necessary validation to save tokens.
+- Make targeted changes; follow the implementation-first and approved testing segments below.
 - Ask questions only for essential ambiguities. Avoid unnecessary planning for straightforward edits.
 - If automatic approval review denies an action, stop work on that action and ask the user for permission and direction before proceeding. Do not retry the denied action or use a workaround. Graphify is the explicit exception: preserve its state, record the skip/failure, and continue unrelated authorized task work under the Graphify policy below.
 
